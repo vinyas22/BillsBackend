@@ -5,9 +5,16 @@ const { createMonthlySalary, getBills, updateTotalBalance } = require('../contro
 
 router.use(requireAuth);
 
-router.post('/', requireAuth, createMonthlySalary);
+// Create a new monthly salary (bill)
+// POST /api/bills
+router.post('/', createMonthlySalary);
+
+// Get all bills
+// GET /api/bills
 router.get('/', getBills);
+
+// Update a bill's balance
+// PUT /api/bills/:billId
 router.put('/:billId', updateTotalBalance);
-router.put('/:id/total', requireAuth, updateTotalBalance);
 
 module.exports = router;

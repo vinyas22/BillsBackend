@@ -11,7 +11,7 @@ function monthlySummaryTemplate(data) {
     weeklyTotals,
     previousMonthData,
     analytics,
-    insights
+    insights = []
   } = data;
 
   const monthName = format(new Date(monthStart), 'MMMM yyyy');
@@ -29,8 +29,8 @@ function monthlySummaryTemplate(data) {
       return `<tr><td ${tdStyle} colspan="3" style="text-align: center; color: #666;">No category data available</td></tr>`;
     }
 
-    const sortedEntries = entries.sort(([,a], [,b]) => b - a);
-    
+    const sortedEntries = entries.sort(([, a], [, b]) => b - a);
+
     const rows = sortedEntries.map(([cat, amt], idx) => {
       const percentage = totalExpense > 0 ? ((amt / totalExpense) * 100).toFixed(1) : 0;
       return `
@@ -75,7 +75,7 @@ function monthlySummaryTemplate(data) {
     const diff = totalExpense - previousMonthData.totalExpense;
     const percentage = previousMonthData.totalExpense > 0 ? ((diff / previousMonthData.totalExpense) * 100).toFixed(1) : 0;
     const isIncrease = diff > 0;
-    
+
     return `
       <div style="background-color: ${isIncrease ? '#fef2f2' : '#f0fdf4'}; padding: 20px; border-radius: 8px; margin: 20px 0;">
         <h3 style="margin-top: 0; color: ${isIncrease ? '#dc2626' : '#16a34a'};">
@@ -91,23 +91,9 @@ function monthlySummaryTemplate(data) {
     `;
   };
 
-  const renderInsights = () => {
-    if (!insights || insights.length === 0) {
-      return `<p style="color: #666; font-style: italic;">No insights available this month</p>`;
-    }
-
-    const insightItems = insights.map(insight => `
-      <li style="margin-bottom: 8px; color: #374151;">
-        ${insight.icon} <strong>${insight.message}</strong>
-      </li>
-    `).join('');
-
-    return `<ul style="margin: 0; padding-left: 20px;">${insightItems}</ul>`;
-  };
-
   const renderAnalytics = () => {
     if (!analytics) return '';
-    
+
     return `
       <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0;">
         <h3 style="margin-top: 0; color: #1e40af;">📈 Monthly Analytics</h3>
@@ -133,19 +119,29 @@ function monthlySummaryTemplate(data) {
     `;
   };
 
+  const renderInsights = () => {
+    if (!insights || insights.length === 0) {
+      return `<p style="color: #666; font-style: italic;">No insights available this month</p>`;
+    }
+
+    const insightItems = insights.map(insight => `
+      <li style="margin-bottom: 8px; color: #374151;">
+        ${insight.icon} <strong>${insight.message}</strong>
+      </li>
+    `).join('');
+
+    return `<ul style="margin: 0; padding-left: 20px;">${insightItems}</ul>`;
+  };
+
   return `
   <div style="font-family: Arial, sans-serif; color: #333; max-width: 700px; margin: 0 auto; background-color: #ffffff;">
-    <!-- Header -->
     <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px 24px; text-align: center; border-radius: 8px 8px 0 0;">
       <h1 style="margin: 0; font-size: 28px; font-weight: bold;">📅 Monthly Financial Report</h1>
       <p style="margin: 10px 0 0 0; font-size: 18px; opacity: 0.95;">${monthName}</p>
     </div>
-    
-    <!-- Main Content -->
     <div style="padding: 30px;">
       <p style="font-size: 16px;"><strong>Hello ${userName || 'User'},</strong></p>
-      
-      <!-- Total Expense Highlight -->
+
       <div style="text-align: center; margin: 30px 0; padding: 25px; background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%); border-radius: 12px;">
         <h2 style="margin: 0; font-size: 18px; color: #6b7280;">Total Monthly Expense</h2>
         <p style="font-size: 42px; font-weight: bold; margin: 10px 0; ${colorAmount(totalExpense)}">
@@ -156,16 +152,14 @@ function monthlySummaryTemplate(data) {
       ${renderComparison()}
       ${renderAnalytics()}
 
-      <!-- Insights Section -->
       <div style="background-color: #fffbeb; padding: 20px; border-radius: 8px; border-left: 4px solid #f59e0b; margin: 25px 0;">
         <h3 style="margin-top: 0; color: #92400e;">💡 Key Insights</h3>
         ${renderInsights()}
       </div>
 
-      <!-- Category Breakdown -->
       <h3 style="margin-top: 40px; color: #1f2937; font-size: 20px;">📊 Expense by Category</h3>
       <div style="overflow-x: auto; margin-bottom: 30px;">
-        <table style="border-collapse: collapse; width: 100%; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" cellpadding="0" cellspacing="0">
+        <table style="border-collapse: collapse; width: 100%; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
           <thead style="background-color: #374151; color: white;">
             <tr>
               <th ${tdStyle.replace('border: 1px solid #ddd;', 'border: none;')}>Category</th>
@@ -177,10 +171,9 @@ function monthlySummaryTemplate(data) {
         </table>
       </div>
 
-      <!-- Weekly Breakdown -->
       <h3 style="margin-top: 40px; color: #1f2937; font-size: 20px;">📈 Weekly Breakdown</h3>
       <div style="overflow-x: auto; margin-bottom: 30px;">
-        <table style="border-collapse: collapse; width: 100%; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" cellpadding="0" cellspacing="0">
+        <table style="border-collapse: collapse; width: 100%; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
           <thead style="background-color: #374151; color: white;">
             <tr>
               <th ${tdStyle.replace('border: 1px solid #ddd;', 'border: none;')}>Week</th>
@@ -191,7 +184,6 @@ function monthlySummaryTemplate(data) {
         </table>
       </div>
 
-      <!-- Call to Action -->
       <div style="text-align: center; margin: 40px 0; padding: 25px; background-color: #f3f4f6; border-radius: 8px;">
         <h3 style="margin-top: 0; color: #1f2937;">📱 Take Control of Your Finances</h3>
         <p style="margin: 10px 0; color: #6b7280;">
@@ -199,8 +191,7 @@ function monthlySummaryTemplate(data) {
         </p>
       </div>
     </div>
-    
-    <!-- Footer -->
+
     <div style="background-color: #f9fafb; padding: 20px; text-align: center; border-radius: 0 0 8px 8px;">
       <p style="font-size: 12px; color: #6b7280; margin: 0;">
         📊 Monthly report generated automatically by Work Billing System<br>

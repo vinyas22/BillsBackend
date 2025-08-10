@@ -1,11 +1,22 @@
 const pool = require('../db');
 
+// Secure version
 const addEntryGroup = async (req, res) => {
   const billId = req.params.billId;
   const { entry_date, items } = req.body;
   const userId = req.user.userId;
 
   try {
+    // --- 1. Ownership check ---
+    const billCheck = await pool.query(
+      'SELECT 1 FROM work_bills WHERE id = $1 AND user_id = $2',
+      [billId, userId]
+    );
+    if (billCheck.rowCount === 0) {
+      return res.status(404).json({ error: 'Bill not found or not authorized' });
+    }
+
+    // --- 2. Main logic as before ---
     const totalDebit = items.reduce((sum, item) => sum + Number(item.amount), 0);
 
     const entryResult = await pool.query(
@@ -37,22 +48,50 @@ const addEntryGroup = async (req, res) => {
     res.status(500).json({ error: 'Failed to add entry group', details: err.message });
   }
 };
-
-module.exports = { addEntryGroup };
+// Entrypoint for: GET /api/categories
+const getCategories = async (req, res) => {
+  const userId = req.user.userId;
+  try {
+    const result = await pool.query(
+      `SELECT DISTINCT ei.category
+       FROM entry_items ei
+       JOIN daily_entries de ON ei.daily_entry_id = de.id
+       JOIN work_bills wb ON de.bill_id = wb.id
+       WHERE wb.user_id = $1
+       ORDER BY ei.category ASC`,
+      [userId]
+    );
+    const categories = result.rows.map(r => r.category);
+    res.json(categories);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch categories', details: err.message });
+  }
+};
 
 
 const getBillEntries = async (req, res) => {
   const billId = req.params.billId;
+  const userId = req.user.userId;
 
   try {
+    // --- 1. Ownership check ---
+    const billCheck = await pool.query(
+      'SELECT 1 FROM work_bills WHERE id = $1 AND user_id = $2',
+      [billId, userId]
+    );
+    if (billCheck.rowCount === 0) {
+      return res.status(404).json({ error: 'Bill not found or not authorized' });
+    }
+
+    // --- 2. Main logic as before ---
     const entries = await pool.query(
-      "SELECT * FROM daily_entries WHERE bill_id = $1 ORDER BY entry_date DESC",
+      'SELECT * FROM daily_entries WHERE bill_id = $1 ORDER BY entry_date DESC',
       [billId]
     );
 
     const allEntries = await Promise.all(entries.rows.map(async (entry) => {
       const items = await pool.query(
-        "SELECT * FROM entry_items WHERE daily_entry_id = $1",
+        'SELECT * FROM entry_items WHERE daily_entry_id = $1',
         [entry.id]
       );
       return { ...entry, items: items.rows };
@@ -64,6 +103,4 @@ const getBillEntries = async (req, res) => {
   }
 };
 
-
-
-module.exports = { addEntryGroup, getBillEntries };
+module.exports = { addEntryGroup, getBillEntries, getCategories };

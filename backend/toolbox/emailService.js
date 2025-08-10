@@ -1,7 +1,6 @@
-// Fixed emailService.js
+// Complete emailService.js
 const nodemailer = require('nodemailer');
 
-// Fix: Use createTransport instead of createTransporter
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
@@ -10,13 +9,6 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-/**
- * Send a weekly HTML email report with retry logic.
- * @param {string} toEmail - Recipient email address
- * @param {string} subject - Subject line
- * @param {string} htmlContent - Full HTML body
- * @param {number} retries - Number of retry attempts
- */
 async function sendWeeklyReportEmail(toEmail, subject, htmlContent, retries = 3) {
   const mailOptions = {
     from: `"Work Billing System" <${process.env.EMAIL_USER}>`,
@@ -38,7 +30,6 @@ async function sendWeeklyReportEmail(toEmail, subject, htmlContent, retries = 3)
         throw new Error(`Failed to send email after ${retries} attempts: ${err.message}`);
       }
       
-      // Exponential backoff: wait 1s, 2s, 4s, etc.
       const waitTime = 1000 * Math.pow(2, attempt - 1);
       console.log(`⏳ Waiting ${waitTime}ms before retry...`);
       await new Promise(resolve => setTimeout(resolve, waitTime));
@@ -46,18 +37,90 @@ async function sendWeeklyReportEmail(toEmail, subject, htmlContent, retries = 3)
   }
 }
 
-/**
- * Validate email address format
- * @param {string} email 
- * @returns {boolean}
- */
-function isValidEmail(email) {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-}
 async function sendMonthlyReportEmail(toEmail, subject, htmlContent, retries = 3) {
-  return sendWeeklyReportEmail(toEmail, subject, htmlContent, retries);
+  const mailOptions = {
+    from: `"Monthly Financial Reports" <${process.env.EMAIL_USER}>`,
+    to: toEmail,
+    subject: subject,
+    html: htmlContent
+  };
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const info = await transporter.sendMail(mailOptions);
+      console.log(`📧 Monthly email sent to ${toEmail} (attempt ${attempt})`);
+      return info;
+    } catch (err) {
+      console.error(`❌ Failed to send monthly email to ${toEmail} (attempt ${attempt})`, err.message);
+      
+      if (attempt === retries) {
+        console.error(`💥 All ${retries} monthly email attempts failed for ${toEmail}`);
+        throw new Error(`Failed to send monthly email after ${retries} attempts: ${err.message}`);
+      }
+      
+      const waitTime = 1000 * Math.pow(2, attempt - 1);
+      console.log(`⏳ Waiting ${waitTime}ms before monthly email retry...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+  }
 }
+
+async function sendQuarterlyReportEmail(toEmail, subject, htmlContent, retries = 3) {
+  const mailOptions = {
+    from: `"Quarterly Financial Reports" <${process.env.EMAIL_USER}>`,
+    to: toEmail,
+    subject: subject,
+    html: htmlContent
+  };
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const info = await transporter.sendMail(mailOptions);
+      console.log(`📧 Quarterly email sent to ${toEmail} (attempt ${attempt})`);
+      return info;
+    } catch (err) {
+      console.error(`❌ Failed to send quarterly email to ${toEmail} (attempt ${attempt})`, err.message);
+      
+      if (attempt === retries) {
+        console.error(`💥 All ${retries} quarterly email attempts failed for ${toEmail}`);
+        throw new Error(`Failed to send quarterly email after ${retries} attempts: ${err.message}`);
+      }
+      
+      const waitTime = 1000 * Math.pow(2, attempt - 1);
+      console.log(`⏳ Waiting ${waitTime}ms before quarterly email retry...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+  }
+}
+// Add to your existing emailService.js
+async function sendYearlyReportEmail(toEmail, subject, htmlContent, retries = 3) {
+  const mailOptions = {
+    from: `"Yearly Financial Intelligence" <${process.env.EMAIL_USER}>`,
+    to: toEmail,
+    subject: subject,
+    html: htmlContent
+  };
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const info = await transporter.sendMail(mailOptions);
+      console.log(`📧 Yearly email sent to ${toEmail} (attempt ${attempt})`);
+      return info;
+    } catch (err) {
+      console.error(`❌ Failed to send yearly email to ${toEmail} (attempt ${attempt})`, err.message);
+      
+      if (attempt === retries) {
+        throw new Error(`Failed to send yearly email after ${retries} attempts: ${err.message}`);
+      }
+      
+      const waitTime = 1000 * Math.pow(2, attempt - 1);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+  }
+}
+
+// Update module.exports
+
 
 function isValidEmail(email) {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -67,5 +130,6 @@ function isValidEmail(email) {
 module.exports = {
   sendWeeklyReportEmail,
   sendMonthlyReportEmail,
-  isValidEmail
+  sendQuarterlyReportEmail,
+  isValidEmail, sendYearlyReportEmail
 };
