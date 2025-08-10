@@ -3,10 +3,12 @@ require('dotenv').config();
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: {
+    rejectUnauthorized: false, // Needed for Supabase SSL, be cautious in production
+  },
 });
 
-// Run connection test immediately
+// Test connection once on startup
 (async () => {
   try {
     const client = await pool.connect();
@@ -19,5 +21,5 @@ const pool = new Pool({
 
 module.exports = {
   query: (text, params) => pool.query(text, params),
-  pool
+  pool,
 };
