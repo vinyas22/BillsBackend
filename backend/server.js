@@ -25,10 +25,15 @@ app.set('io', io);
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:4200',
+  origin: [
+    'http://localhost:4200',  // Angular dev server
+    'http://localhost:4000',  // Angular Universal server
+    process.env.FRONTEND_URL  // Your deployed frontend
+  ].filter(Boolean), // Removes undefined values if env not set
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   credentials: true
 }));
+
 app.use(express.json());
 
 // Test routes (no auth)
