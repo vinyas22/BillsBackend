@@ -29,10 +29,12 @@ app.use(cors({
     'http://localhost:4200',  // Angular dev server
     'http://localhost:4000',  // Angular Universal server
     process.env.FRONTEND_URL  // Your deployed frontend
-  ].filter(Boolean), // Removes undefined values if env not set
+  ].filter(Boolean),
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
+
 
 app.use(express.json());
 
