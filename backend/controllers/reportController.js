@@ -1,221 +1,428 @@
 const ReportService = require('../services/ReportService');
-const { asyncHandler, createError } = require('../middleware/errorHandler');
 
-class ReportController {
-  // Weekly data
-  static getWeeklyData = asyncHandler(async (req, res) => {
-    const userId = req.user.userId;
-    const { weekValue } = req.params;
-
-    if (!weekValue) {
-      throw createError(400, 'Missing required parameter: weekValue');
-    }
-
-    console.log(`📅 Controller: Loading weekly data for ${weekValue}, user: ${userId}`);
-
-    const reportData = await ReportService.generateWeeklyReport(userId, weekValue);
-
-    res.json({
-      success: true,
-      data: reportData,
-      timestamp: new Date().toISOString()
-    });
-  });
-
-  // Monthly report
-  static getMonthlyReport = asyncHandler(async (req, res) => {
-    const userId = req.user.userId;
-    const { date } = req.query;
-
-    const reportData = await ReportService.generateMonthlyReport(userId, date);
-
-    res.json({
-      success: true,
-      data: reportData,
-      timestamp: new Date().toISOString()
-    });
-  });
-
-  // Quarterly report
-  static getQuarterlyReport = asyncHandler(async (req, res) => {
-    const userId = req.user.userId;
-    const { date } = req.query;
-
-    const reportData = await ReportService.generateQuarterlyReport(userId, date);
-
-    res.json({
-      success: true,
-      data: reportData,
-      timestamp: new Date().toISOString()
-    });
-  });
-
-  // Yearly report
-  static getYearlyReport = asyncHandler(async (req, res) => {
-    const userId = req.user.userId;
-    const { date } = req.query;
-
-    const reportData = await ReportService.generateYearlyReport(userId, date);
-
-    res.json({
-      success: true,
-      data: reportData,
-      timestamp: new Date().toISOString()
-    });
-  });
-
-  // Available quarters
-  static getAvailableQuarters = asyncHandler(async (req, res) => {
-    const userId = req.user.userId;
-    const quarters = await ReportService.getAvailableQuarters(userId);
-
-    res.json({
-      success: true,
-      data: { quarters },
-      count: quarters.length
-    });
-  });
-
-  // Available years
-  static getAvailableYears = asyncHandler(async (req, res) => {
-    const userId = req.user.userId;
-    const years = await ReportService.getAvailableYears(userId);
-
-    res.json({
-      success: true,
-      data: { years },
-      count: years.length
-    });
-  });
-
-  // Available months
-  static getAvailableMonths = asyncHandler(async (req, res) => {
-    const userId = req.user.userId;
-    const months = await ReportService.getAvailableMonths(userId);
-
-    res.json({
-      success: true,
-      data: { periods: months },
-      count: months.length
-    });
-  });
-
-  // Available weeks
-  static getAvailableWeeks = asyncHandler(async (req, res) => {
-    const userId = req.user.userId;
-    const weeks = await ReportService.getAvailableWeeks(userId);
-
-    res.json({
-      success: true,
-      data: { periods: weeks },
-      count: weeks.length
-    });
-  });
-
-  // Weekly by month report
-  static getWeeklyByMonthReport = asyncHandler(async (req, res) => {
+/**
+ * Get weekly report by month for a specific bill
+ */
+const getWeeklyByMonthReport = async (req, res) => {
+  try {
     const { billId, date } = req.params;
+    const userId = req.user.userId;
     
-    if (!billId || !date) {
-      throw createError(400, 'Missing required parameters: billId and date');
-    }
-
-    const reportData = await ReportService.generateWeeklyByMonthReport(
-      parseInt(billId), 
-      date
-    );
-
+    const report = await ReportService.generateWeeklyReport(userId, date);
+    
     res.json({
       success: true,
-      data: reportData,
-      timestamp: new Date().toISOString()
+      data: report,
+      message: 'Weekly report generated successfully'
     });
-  });
+  } catch (error) {
+    console.error('Weekly by month report error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate weekly report',
+      error: error.message
+    });
+  }
+};
 
-  // Monthly data by period
-  static getMonthlyData = asyncHandler(async (req, res) => {
+/**
+ * Get monthly report
+ */
+const getMonthlyReport = async (req, res) => {
+  try {
+    const { date } = req.query;
     const userId = req.user.userId;
-    const { monthValue } = req.params;
-
-    if (!monthValue) {
-      throw createError(400, 'Missing required parameter: monthValue');
-    }
-
-    // Convert monthValue (2024-07) to date format
-    const [year, month] = monthValue.split('-');
-    const date = `${year}-${month}-01`;
     
-    const reportData = await ReportService.generateMonthlyReport(userId, date);
-
+    if (!date) {
+      return res.status(400).json({
+        success: false,
+        message: 'Date parameter is required'
+      });
+    }
+    
+    const report = await ReportService.generateMonthlyReport(userId, date);
+    
     res.json({
       success: true,
-      data: reportData,
-      timestamp: new Date().toISOString()
+      data: report,
+      message: 'Monthly report generated successfully'
     });
-  });
+  } catch (error) {
+    console.error('Monthly report error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate monthly report',
+      error: error.message
+    });
+  }
+};
 
-  // Quarterly data by period
-  static getQuarterlyData = asyncHandler(async (req, res) => {
+/**
+ * Get quarterly report - FIXED VERSION
+ */
+const getQuarterlyReport = async (req, res) => {
+  try {
+    const { date } = req.query;
     const userId = req.user.userId;
+    
+    console.log('📅 Quarterly report requested with date:', date);
+    console.log('📅 User ID:', userId);
+    
+    if (!date) {
+      return res.status(400).json({
+        success: false,
+        message: 'Date parameter is required'
+      });
+    }
+    
+    // Call the service method
+    const report = await ReportService.generateQuarterlyReport(userId, date);
+    
+    console.log('📊 Generated report data:', {
+      type: report?.type,
+      totalExpense: report?.totalExpense,
+      previousQuarter: report?.previousQuarter ? 'Present' : 'Missing',
+      categoriesCount: report?.category?.length,
+      previousCategoriesCount: report?.previousQuarter?.category?.length
+    });
+    
+    // FIXED: Make sure to return the report data
+    res.json({
+      success: true,
+      data: report,  // ✅ This was missing in your backend
+      message: 'Quarterly report generated successfully'
+    });
+  } catch (error) {
+    console.error('❌ Quarterly report error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate quarterly report',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get quarterly report by path parameter
+ */
+const getQuarterlyData = async (req, res) => {
+  try {
     const { quarterValue } = req.params;
-
-    if (!quarterValue) {
-      throw createError(400, 'Missing required parameter: quarterValue');
-    }
-
-    // Convert quarterValue (2024-Q1) to date format
-    const [year, quarterPart] = quarterValue.split('-Q');
-    const quarter = parseInt(quarterPart);
-    const month = (quarter - 1) * 3;
-    const date = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-    
-    const reportData = await ReportService.generateQuarterlyReport(userId, date);
-
-    res.json({
-      success: true,
-      data: reportData,
-      timestamp: new Date().toISOString()
-    });
-  });
-
-  // Yearly data by period
- static getYearlyData = asyncHandler(async (req, res) => {
     const userId = req.user.userId;
-    const { yearValue } = req.params;
-
-    if (!yearValue) {
-      throw createError(400, 'Missing required parameter: yearValue');
+    
+    console.log('📅 Quarterly data requested with quarterValue:', quarterValue);
+    
+    if (!quarterValue) {
+      return res.status(400).json({
+        success: false,
+        message: 'Quarter value parameter is required'
+      });
     }
-
-    // Accept both '2024' or '2024-01-01'
-    let date = yearValue;
-    if (/^\d{4}$/.test(yearValue)) {
-      date = `${yearValue}-01-01`; // only append if it's just a year
-    }
-
-    const reportData = await ReportService.generateYearlyReport(userId, date);
-
+    
+    const report = await ReportService.generateQuarterlyReport(userId, quarterValue);
+    
     res.json({
       success: true,
-      data: reportData,
-      timestamp: new Date().toISOString()
+      data: report,
+      message: 'Quarterly report generated successfully'
     });
-});
+  } catch (error) {
+    console.error('Quarterly data error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate quarterly report',
+      error: error.message
+    });
+  }
+};
 
-}
+/**
+ * Get yearly report
+ */
+const getYearlyReport = async (req, res) => {
+  try {
+    const { date } = req.query;
+    const userId = req.user.userId;
+    
+    if (!date) {
+      return res.status(400).json({
+        success: false,
+        message: 'Date parameter is required'
+      });
+    }
+    
+    const report = await ReportService.generateYearlyReport(userId, date);
+    
+    res.json({
+      success: true,
+      data: report,
+      message: 'Yearly report generated successfully'
+    });
+  } catch (error) {
+    console.error('Yearly report error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate yearly report',
+      error: error.message
+    });
+  }
+};
 
-// Export individual functions for backward compatibility
+/**
+ * Get available quarters for the user
+ */
+const getAvailableQuarters = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    console.log('📌 Fetching available quarters for user:', userId);
+    
+    const quarters = await ReportService.getAvailableQuarters(userId);
+    
+    console.log('📊 DB returned quarters:', quarters.length, 'quarters');
+    
+    res.json({
+      success: true,
+      data: {
+        quarters: quarters
+      },
+      message: 'Available quarters retrieved successfully'
+    });
+  } catch (error) {
+    console.error('Available quarters error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve available quarters',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get available years for the user
+ */
+const getAvailableYears = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    const years = await ReportService.getAvailableYears(userId);
+    
+    res.json({
+      success: true,
+      data: {
+        years: years
+      },
+      message: 'Available years retrieved successfully'
+    });
+  } catch (error) {
+    console.error('Available years error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve available years',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get available months for the user
+ */
+const getAvailableMonths = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    // Generate available months from available quarters data
+    const quarters = await ReportService.getAvailableQuarters(userId);
+    const months = [];
+    
+    quarters.forEach(quarter => {
+      const startMonth = (quarter.quarter - 1) * 3 + 1;
+      for (let i = 0; i < 3; i++) {
+        const month = startMonth + i;
+        if (month <= 12) {
+          months.push({
+            year: quarter.year,
+            month: month,
+            label: `${new Date(quarter.year, month - 1).toLocaleDateString('en-US', { month: 'long' })} ${quarter.year}`,
+            value: `${quarter.year}-${String(month).padStart(2, '0')}-01`
+          });
+        }
+      }
+    });
+    
+    // Sort months by year and month descending
+    months.sort((a, b) => {
+      if (a.year !== b.year) return b.year - a.year;
+      return b.month - a.month;
+    });
+    
+    res.json({
+      success: true,
+      data: {
+        periods: months
+      },
+      message: 'Available months retrieved successfully'
+    });
+  } catch (error) {
+    console.error('Available months error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve available months',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get available weeks for the user
+ */
+const getAvailableWeeks = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    // Generate last 12 weeks based on current date
+    const weeks = [];
+    const today = new Date();
+    
+    for (let i = 0; i < 12; i++) {
+      const weekStart = new Date(today);
+      weekStart.setDate(today.getDate() - (today.getDay()) - (i * 7));
+      
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      
+      weeks.push({
+        label: `Week of ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+        value: weekStart.toISOString().split('T')[0],
+        startDate: weekStart.toISOString().split('T')[0],
+        endDate: weekEnd.toISOString().split('T')[0]
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        periods: weeks
+      },
+      message: 'Available weeks retrieved successfully'
+    });
+  } catch (error) {
+    console.error('Available weeks error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve available weeks',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get weekly data by week value
+ */
+const getWeeklyData = async (req, res) => {
+  try {
+    const { weekValue } = req.params;
+    const userId = req.user.userId;
+    
+    if (!weekValue) {
+      return res.status(400).json({
+        success: false,
+        message: 'Week value parameter is required'
+      });
+    }
+    
+    const report = await ReportService.generateWeeklyReport(userId, weekValue);
+    
+    res.json({
+      success: true,
+      data: report,
+      message: 'Weekly report generated successfully'
+    });
+  } catch (error) {
+    console.error('Weekly data error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate weekly report',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get monthly data by month value
+ */
+const getMonthlyData = async (req, res) => {
+  try {
+    const { monthValue } = req.params;
+    const userId = req.user.userId;
+    
+    if (!monthValue) {
+      return res.status(400).json({
+        success: false,
+        message: 'Month value parameter is required'
+      });
+    }
+    
+    const report = await ReportService.generateMonthlyReport(userId, monthValue);
+    
+    res.json({
+      success: true,
+      data: report,
+      message: 'Monthly report generated successfully'
+    });
+  } catch (error) {
+    console.error('Monthly data error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate monthly report',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get yearly data by year value
+ */
+const getYearlyData = async (req, res) => {
+  try {
+    const { yearValue } = req.params;
+    const userId = req.user.userId;
+    
+    if (!yearValue) {
+      return res.status(400).json({
+        success: false,
+        message: 'Year value parameter is required'
+      });
+    }
+    
+    const report = await ReportService.generateYearlyReport(userId, yearValue);
+    
+    res.json({
+      success: true,
+      data: report,
+      message: 'Yearly report generated successfully'
+    });
+  } catch (error) {
+    console.error('Yearly data error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate yearly report',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
-  getWeeklyByMonthReport: ReportController.getWeeklyByMonthReport,
-  getMonthlyReport: ReportController.getMonthlyReport,
-  getQuarterlyReport: ReportController.getQuarterlyReport,
-  getYearlyReport: ReportController.getYearlyReport,
-  getAvailableQuarters: ReportController.getAvailableQuarters,
-  getAvailableYears: ReportController.getAvailableYears,
-  getAvailableMonths: ReportController.getAvailableMonths,
-  getAvailableWeeks: ReportController.getAvailableWeeks,
-  getWeeklyData: ReportController.getWeeklyData,
-  getMonthlyData: ReportController.getMonthlyData,
-  getQuarterlyData: ReportController.getQuarterlyData,
-  getYearlyData: ReportController.getYearlyData
+  getWeeklyByMonthReport,
+  getMonthlyReport,
+  getQuarterlyReport,
+  getYearlyReport,
+  getAvailableQuarters,
+  getAvailableYears,
+  getAvailableMonths,
+  getAvailableWeeks,
+  getWeeklyData,
+  getMonthlyData,
+  getQuarterlyData,
+  getYearlyData
 };

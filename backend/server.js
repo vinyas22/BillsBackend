@@ -26,8 +26,7 @@ app.set('io', io);
 // Middleware
 app.use(cors({
   origin: [
-    'http://localhost:4200',  // Angular dev server
-    'http://localhost:4000',  // Angular Universal server
+    'https://frntend-l8xe.onrender.com/login',
     process.env.FRONTEND_URL  // Your deployed frontend
   ].filter(Boolean),
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],

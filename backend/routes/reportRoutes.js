@@ -21,31 +21,29 @@ const {
 // Apply authentication to all routes
 router.use(requireAuth);
 
-// ===== CLEAN ROUTES - NO BUSINESS LOGIC =====
-
-// Weekly endpoints
+// ===== WEEKLY ROUTES =====
 router.get('/weekly/available-periods', getAvailableWeeks);
 router.get('/weekly/data/:weekValue', getWeeklyData);
 
-// Monthly endpoints  
+// ===== MONTHLY ROUTES =====
 router.get('/monthly/available-months', getAvailableMonths);
-router.get('/monthly', getMonthlyReport);
+router.get('/monthly', getMonthlyReport); // Query param: ?date=YYYY-MM-DD
 router.get('/monthly/data/:monthValue', getMonthlyData);
 
-// Quarterly endpoints
-router.get('/quarterly', getQuarterlyReport);
-router.get('/quarterly/data/:quarterValue', getQuarterlyData);
+// ===== QUARTERLY ROUTES =====
 router.get('/quarters/available', getAvailableQuarters);
+router.get('/quarterly', getQuarterlyReport); // Query param: ?date=YYYY-Q# or YYYY-MM-DD
+router.get('/quarterly/data/:quarterValue', getQuarterlyData);
 
-// Yearly endpoints
-router.get('/yearly', getYearlyReport);
-router.get('/yearly/data/:yearValue', getYearlyData);
+// ===== YEARLY ROUTES =====
 router.get('/years/available', getAvailableYears);
+router.get('/yearly', getYearlyReport); // Query param: ?date=YYYY or YYYY-MM-DD
+router.get('/yearly/data/:yearValue', getYearlyData);
 
-// Legacy endpoint
+// ===== LEGACY ROUTES =====
 router.get('/report/weekly-by-month/:billId/:date', getWeeklyByMonthReport);
 
-// Health check endpoint
+// ===== HEALTH CHECK =====
 router.get('/health', (req, res) => {
   res.json({
     success: true,
@@ -63,12 +61,12 @@ router.get('/health', (req, res) => {
       },
       quarterly: {
         available: '/api/reports/quarters/available',
-        legacy: '/api/reports/quarterly?date=YYYY-MM-DD',
+        legacy: '/api/reports/quarterly?date=YYYY-Q# or YYYY-MM-DD',
         data: '/api/reports/quarterly/data/:quarterValue'
       },
       yearly: {
         available: '/api/reports/years/available',
-        legacy: '/api/reports/yearly?date=YYYY-MM-DD',
+        legacy: '/api/reports/yearly?date=YYYY or YYYY-MM-DD',
         data: '/api/reports/yearly/data/:yearValue'
       }
     }
