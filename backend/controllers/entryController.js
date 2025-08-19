@@ -7,7 +7,7 @@ const addEntryGroup = async (req, res) => {
   const userId = req.user.userId;
 
   try {
-    // --- 1. Ownership check ---
+    // Ownership check
     const billCheck = await pool.query(
       'SELECT 1 FROM work_bills WHERE id = $1 AND user_id = $2',
       [billId, userId]
@@ -16,15 +16,17 @@ const addEntryGroup = async (req, res) => {
       return res.status(404).json({ error: 'Bill not found or not authorized' });
     }
 
-    // --- 2. Main logic as before ---
+    // Total expense for this entry group
     const totalDebit = items.reduce((sum, item) => sum + Number(item.amount), 0);
 
+    // Insert daily entry
     const entryResult = await pool.query(
       'INSERT INTO daily_entries (bill_id, entry_date, total_debit) VALUES ($1, $2, $3) RETURNING id',
       [billId, entry_date, totalDebit]
     );
     const dailyEntryId = entryResult.rows[0].id;
 
+    // Insert entry items
     const itemInsertPromises = items.map(item =>
       pool.query(
         'INSERT INTO entry_items (daily_entry_id, category, description, amount, proof_url) VALUES ($1, $2, $3, $4, $5)',
@@ -33,10 +35,7 @@ const addEntryGroup = async (req, res) => {
     );
     await Promise.all(itemInsertPromises);
 
-    await pool.query(
-      'UPDATE work_bills SET total_balance = total_balance - $1 WHERE id = $2',
-      [totalDebit, billId]
-    );
+    // ✅ Do NOT touch total_balance here — keep it as fixed income
 
     await pool.query(
       'INSERT INTO activity_logs (user_id, action, detail) VALUES ($1, $2, $3)',
@@ -48,6 +47,7 @@ const addEntryGroup = async (req, res) => {
     res.status(500).json({ error: 'Failed to add entry group', details: err.message });
   }
 };
+
 // Entrypoint for: GET /api/categories
 const getCategories = async (req, res) => {
   const userId = req.user.userId;

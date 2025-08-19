@@ -3,42 +3,29 @@ const { createError } = require('../middleware/errorHandler');
 const { 
   parseISO, isValid, format, startOfMonth, endOfMonth,
   startOfQuarter, endOfQuarter, startOfYear, endOfYear,
-  subMonths, subQuarters, subYears
+  subMonths, subQuarters, subYears,
+  startOfWeek, endOfWeek
 } = require('date-fns');
 
 class ReportService {
-  // ===== FIXED UTILITY METHODS =====
+  // ===== UTILITY =====
   static validateDateParam(date) {
     if (!date) throw createError(400, 'Missing required parameter: date');
 
-    console.log('🔧 validateDateParam input:', date);
-
-    // Handle YYYY-Q# format (e.g., "2025-Q3")
     const quarterMatch = date.match(/^(\d{4})-Q([1-4])$/);
     if (quarterMatch) {
       const year = quarterMatch[1];
       const quarter = parseInt(quarterMatch[2], 10);
       const monthMap = { 1: '01', 2: '04', 3: '07', 4: '10' };
       date = `${year}-${monthMap[quarter]}-01`;
-      console.log('🔧 Converted YYYY-Q# to:', date);
-    }
-    // Handle YYYY-MM format
-    else if (/^\d{4}-\d{2}$/.test(date)) {
+    } else if (/^\d{4}-\d{2}$/.test(date)) {
       date = `${date}-01`;
-      console.log('🔧 Converted YYYY-MM to:', date);
-    }
-    // Handle YYYY only
-    else if (/^\d{4}$/.test(date)) {
+    } else if (/^\d{4}$/.test(date)) {
       date = `${date}-01-01`;
-      console.log('🔧 Converted YYYY to:', date);
     }
 
     const parsed = parseISO(date);
-    if (!isValid(parsed)) {
-      throw createError(400, 'Invalid date format. Expected YYYY-MM-DD');
-    }
-    
-    console.log('🔧 Final parsed date:', parsed.toISOString());
+    if (!isValid(parsed)) throw createError(400, 'Invalid date format. Expected YYYY-MM-DD');
     return parsed;
   }
 
@@ -53,12 +40,6 @@ class ReportService {
   }
 
   // ===== DATA FETCHERS =====
-  static async getUserBillForMonth(userId, billMonth) {
-    const sql = `SELECT total_balance FROM work_bills WHERE user_id = $1 AND bill_month = $2 LIMIT 1`;
-    const result = await DatabaseService.findOne(sql, [userId, billMonth]);
-    return result ? this.formatCurrency(result.total_balance) : 0;
-  }
-
   static async getCategoryTotals(userId, startDate, endDate) {
     const sql = `
       SELECT category, SUM(amount) AS amount
@@ -146,47 +127,21 @@ class ReportService {
     }));
   }
 
-  // ===== REPORT GENERATORS =====
-  static async generateWeeklyReport(userId, weekValue) {
-    const weekDate = new Date(weekValue);
-    const weekStart = new Date(weekDate);
-    weekStart.setDate(weekDate.getDate() - weekDate.getDay());
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 6);
-
-    const prevWeekStart = new Date(weekStart);
-    prevWeekStart.setDate(weekStart.getDate() - 7);
-    const prevWeekEnd = new Date(prevWeekStart);
-    prevWeekEnd.setDate(prevWeekStart.getDate() + 6);
-
-    const [
-      currCategories,
-      currDaily,
-      currDetailedDaily,
-      prevCategories,
-      prevDaily
-    ] = await Promise.all([
-      this.getCategoryTotals(userId, weekStart, weekEnd),
-      this.getDailyTotals(userId, weekStart, weekEnd),
-      this.getDetailedDaily(userId, weekStart, weekEnd),
-      this.getCategoryTotals(userId, prevWeekStart, prevWeekEnd),
-      this.getDailyTotals(userId, prevWeekStart, prevWeekEnd)
-    ]);
-
-    return {
-      type: 'weekly',
-      daily: currDaily,
-      detailed_daily: currDetailedDaily,
-      category: currCategories,
-      totalExpense: currCategories.reduce((s, c) => s + c.amount, 0),
-      previousWeek: {
-        category: prevCategories,
-        daily: prevDaily,
-        totalExpense: prevCategories.reduce((s, c) => s + c.amount, 0)
-      }
-    };
+  static async getWeeklyTotals(userId, startDate, endDate) {
+    const sql = `
+      SELECT DATE_TRUNC('week', de.entry_date) AS week, SUM(ei.amount) AS total
+      FROM entry_items ei
+      JOIN daily_entries de ON ei.daily_entry_id = de.id
+      JOIN work_bills wb ON wb.id = de.bill_id
+      WHERE wb.user_id = $1 AND de.entry_date BETWEEN $2 AND $3
+      GROUP BY DATE_TRUNC('week', de.entry_date)
+      ORDER BY week
+    `;
+    const rows = await DatabaseService.query(sql, [userId, startDate, endDate]);
+    return rows.map(r => ({ week: format(r.week, 'yyyy-MM-dd'), total: this.formatCurrency(r.total) }));
   }
 
+  // ===== REPORT GENERATORS =====
   static async generateMonthlyReport(userId, date) {
     const parsed = this.validateDateParam(date);
     const start = startOfMonth(parsed);
@@ -202,36 +157,40 @@ class ReportService {
       prevCategories,
       currDetailedDaily,
       prevDaily,
-      prevDetailedDaily
+      prevDetailedDaily,
+      currExpense,
+      prevExpense
     ] = await Promise.all([
       this.getCategoryTotals(userId, start, end),
-      this.getUserBillForMonth(userId, format(start, 'yyyy-MM')),
-      this.getUserBillForMonth(userId, format(prevStart, 'yyyy-MM')),
+      DatabaseService.sum('work_bills','total_balance','WHERE user_id = $1 AND bill_month = $2', [userId, format(start,'yyyy-MM')]),
+      DatabaseService.sum('work_bills','total_balance','WHERE user_id = $1 AND bill_month = $2', [userId, format(prevStart,'yyyy-MM')]),
       this.getDailyTotals(userId, start, end),
       this.getCategoryTotals(userId, prevStart, prevEnd),
       this.getDetailedDaily(userId, start, end),
       this.getDailyTotals(userId, prevStart, prevEnd),
-      this.getDetailedDaily(userId, prevStart, prevEnd)
+      this.getDetailedDaily(userId, prevStart, prevEnd),
+      DatabaseService.sum('entry_items ei JOIN daily_entries de ON ei.daily_entry_id = de.id JOIN work_bills wb ON wb.id = de.bill_id', 'ei.amount','WHERE wb.user_id = $1 AND de.entry_date BETWEEN $2 AND $3', [userId, start, end]),
+      DatabaseService.sum('entry_items ei JOIN daily_entries de ON ei.daily_entry_id = de.id JOIN work_bills wb ON wb.id = de.bill_id', 'ei.amount','WHERE wb.user_id = $1 AND de.entry_date BETWEEN $2 AND $3', [userId, prevStart, prevEnd])
     ]);
 
-    const currentExpense = currCategories.reduce((s,c) => s + c.amount, 0);
-    const previousExpense = prevCategories.reduce((s,c) => s + c.amount, 0);
+    const currentSavings = this.calculateSavings(currIncome, currExpense);
+    const previousSavings = this.calculateSavings(prevIncome, prevExpense);
 
     return {
       type: 'monthly',
-      month: {
-        year: start.getFullYear(),
-        month: start.getMonth() + 1,
-        label: format(start, 'MMMM yyyy')
-      },
-      totalIncome: currIncome,
-      totalExpense: currentExpense,
+      month: { year: start.getFullYear(), month: start.getMonth() + 1, label: format(start,'MMMM yyyy') },
+      totalIncome: this.formatCurrency(currIncome),
+      totalExpense: this.formatCurrency(currExpense),
+      savings: currentSavings.savings,
+      savingsRate: currentSavings.savingsRate,
       daily: currDaily,
       detailed_daily: currDetailedDaily,
       category: currCategories,
       previousMonth: {
-        totalIncome: prevIncome,
-        totalExpense: previousExpense,
+        totalIncome: this.formatCurrency(prevIncome),
+        totalExpense: this.formatCurrency(prevExpense),
+        savings: previousSavings.savings,
+        savingsRate: previousSavings.savingsRate,
         category: prevCategories,
         daily: prevDaily,
         detailed_daily: prevDetailedDaily
@@ -239,134 +198,89 @@ class ReportService {
     };
   }
 
-  // ===== FIXED QUARTERLY REPORT WITH DEBUG LOGGING =====
   static async generateQuarterlyReport(userId, date) {
-    console.log('🏁 ReportService.generateQuarterlyReport CALLED');
-    console.log('   userId:', userId);
-    console.log('   date:', date);
+    const parsed = this.validateDateParam(date);
+    const start = startOfQuarter(parsed);
+    const end = endOfQuarter(parsed);
+    const prevStart = startOfQuarter(subQuarters(parsed,1));
+    const prevEnd = endOfQuarter(subQuarters(parsed,1));
 
-    const parsedDate = this.validateDateParam(date);
-    const start = startOfQuarter(parsedDate);
-    const end = endOfQuarter(parsedDate);
-    const prevStart = startOfQuarter(subQuarters(parsedDate, 1));
-    const prevEnd = endOfQuarter(subQuarters(parsedDate, 1));
-
-    // Enhanced debug logging
-    console.log('🔍 DETAILED DATE BREAKDOWN:');
-    console.log('   Original input:', date);
-    console.log('   After validateDateParam:', parsedDate.toISOString());
-    console.log('   startOfQuarter(parsedDate):', startOfQuarter(parsedDate).toISOString());
-    console.log('   endOfQuarter(parsedDate):', endOfQuarter(parsedDate).toISOString());
-    console.log('   subQuarters(parsedDate, 1):', subQuarters(parsedDate, 1).toISOString());
-    console.log('   startOfQuarter(subQuarters(parsedDate, 1)):', startOfQuarter(subQuarters(parsedDate, 1)).toISOString());
-    console.log('   endOfQuarter(subQuarters(parsedDate, 1)):', endOfQuarter(subQuarters(parsedDate, 1)).toISOString());
-
-    console.log('🔍 QUARTERLY REPORT DEBUG:');
-    console.log('📅 Current Quarter:', format(start, 'yyyy-MM-dd'), 'to', format(end, 'yyyy-MM-dd'));
-    console.log('📅 Previous Quarter:', format(prevStart, 'yyyy-MM-dd'), 'to', format(prevEnd, 'yyyy-MM-dd'));
-
-    const startMonth = format(start, 'yyyy-MM');
-    const endMonth = format(end, 'yyyy-MM');
-    const prevStartMonth = format(prevStart, 'yyyy-MM');
-    const prevEndMonth = format(prevEnd, 'yyyy-MM');
-
-    console.log('💰 Income Query Ranges:');
-    console.log('   Current:', startMonth, 'to', endMonth);
-    console.log('   Previous:', prevStartMonth, 'to', prevEndMonth);
-
-    // Test the exact query before running the full report
-    const currentTest = await DatabaseService.query(`
-      SELECT COUNT(*) as count, COALESCE(SUM(ei.amount), 0) as total
-      FROM entry_items ei
-      JOIN daily_entries de ON ei.daily_entry_id = de.id
-      JOIN work_bills wb ON wb.id = de.bill_id
-      WHERE wb.user_id = $1 AND de.entry_date BETWEEN $2 AND $3
-    `, [userId, start, end]);
-
-    const previousTest = await DatabaseService.query(`
-      SELECT COUNT(*) as count, COALESCE(SUM(ei.amount), 0) as total
-      FROM entry_items ei
-      JOIN daily_entries de ON ei.daily_entry_id = de.id
-      JOIN work_bills wb ON wb.id = de.bill_id
-      WHERE wb.user_id = $1 AND de.entry_date BETWEEN $2 AND $3
-    `, [userId, prevStart, prevEnd]);
-
-    console.log('💾 CURRENT quarter test:', currentTest[0]);
-    console.log('💾 PREVIOUS quarter test:', previousTest[0]);
-
-    const [
-      catCurr,
-      incomeCurr,
-      incomePrev,
-      dailyCurr,
-      catPrev,
-      detailedCurr,
-      prevDaily,
-      prevDetailedDaily
-    ] = await Promise.all([
-      this.getCategoryTotals(userId, start, end),
-      DatabaseService.sum('work_bills', 'total_balance', 'WHERE user_id = $1 AND bill_month BETWEEN $2 AND $3', [userId, startMonth, endMonth]),
-      DatabaseService.sum('work_bills', 'total_balance', 'WHERE user_id = $1 AND bill_month BETWEEN $2 AND $3', [userId, prevStartMonth, prevEndMonth]),
-      this.getDailyTotals(userId, start, end),
-      this.getCategoryTotals(userId, prevStart, prevEnd),
-      this.getDetailedDaily(userId, start, end),
-      this.getDailyTotals(userId, prevStart, prevEnd),
-      this.getDetailedDaily(userId, prevStart, prevEnd)
+    const [currIncome, prevIncome, currExpense, prevExpense, currCategories, prevCategories] = await Promise.all([
+      DatabaseService.sum('work_bills','total_balance','WHERE user_id = $1', [userId]),
+      DatabaseService.sum('work_bills','total_balance','WHERE user_id = $1', [userId]),
+      DatabaseService.sum('entry_items ei JOIN daily_entries de ON ei.daily_entry_id = de.id JOIN work_bills wb ON wb.id = de.bill_id','ei.amount','WHERE wb.user_id = $1 AND de.entry_date BETWEEN $2 AND $3',[userId,start,end]),
+      DatabaseService.sum('entry_items ei JOIN daily_entries de ON ei.daily_entry_id = de.id JOIN work_bills wb ON wb.id = de.bill_id','ei.amount','WHERE wb.user_id = $1 AND de.entry_date BETWEEN $2 AND $3',[userId,prevStart,prevEnd]),
+      this.getCategoryTotals(userId,start,end),
+      this.getCategoryTotals(userId,prevStart,prevEnd)
     ]);
 
-    const currentExpense = catCurr.reduce((s,c) => s + c.amount, 0);
-    const previousExpense = catPrev.reduce((s,c) => s + c.amount, 0);
+    const currentSavings = this.calculateSavings(currIncome, currExpense);
+    const previousSavings = this.calculateSavings(prevIncome, prevExpense);
 
-    console.log('📊 Query Results:');
-    console.log('   Current Income:', incomeCurr);
-    console.log('   Previous Income:', incomePrev);
-    console.log('   Current Expense:', currentExpense);
-    console.log('   Previous Expense:', previousExpense);
-    console.log('   Current Categories:', catCurr.length);
-    console.log('   Previous Categories:', catPrev.length);
-
-    const result = {
+    return {
       type: 'quarterly',
-      quarter: {
-        year: start.getFullYear(),
-        quarter: Math.ceil((start.getMonth() + 1) / 3),
-        label: `Q${Math.ceil((start.getMonth() + 1) / 3)} ${start.getFullYear()}`,
-        months: [
-          format(start, 'MMM'),
-          format(new Date(start.getFullYear(), start.getMonth() + 1), 'MMM'),
-          format(new Date(start.getFullYear(), start.getMonth() + 2), 'MMM')
-        ]
-      },
-      totalIncome: this.formatCurrency(incomeCurr),
-      totalExpense: currentExpense,
-      daily: dailyCurr,
-      detailed_daily: detailedCurr,
-      category: catCurr,
+      quarter: `Q${Math.ceil((start.getMonth()+1)/3)} ${start.getFullYear()}`,
+      totalIncome: this.formatCurrency(currIncome),
+      totalExpense: this.formatCurrency(currExpense),
+      savings: currentSavings.savings,
+      savingsRate: currentSavings.savingsRate,
+      category: currCategories,
       previousQuarter: {
-        totalIncome: this.formatCurrency(incomePrev),
-        totalExpense: previousExpense,
-        category: catPrev,
-        daily: prevDaily,
-        detailed_daily: prevDetailedDaily
+        totalIncome: this.formatCurrency(prevIncome),
+        totalExpense: this.formatCurrency(prevExpense),
+        savings: previousSavings.savings,
+        savingsRate: previousSavings.savingsRate,
+        category: prevCategories
       }
     };
+  }
 
-    console.log('🏁 ReportService.generateQuarterlyReport RETURNING:', {
-      type: result.type,
-      totalExpense: result.totalExpense,
-      previousQuarter: result.previousQuarter ? 'Present' : 'Missing',
-      previousQuarterExpense: result.previousQuarter?.totalExpense
-    });
+  static async generateWeeklyReport(userId, date) {
+    const parsed = this.validateDateParam(date);
+    const start = startOfWeek(parsed, { weekStartsOn: 1 });
+    const end = endOfWeek(parsed, { weekStartsOn: 1 });
+    const prevStart = startOfWeek(subMonths(parsed,1), { weekStartsOn: 1 });
+    const prevEnd = endOfWeek(subMonths(parsed,1), { weekStartsOn: 1 });
 
-    return result;
+    const [currIncome, prevIncome, currExpense, prevExpense, currCategories, prevCategories, weeklyTotals] = await Promise.all([
+      DatabaseService.sum('work_bills','total_balance','WHERE user_id = $1', [userId]),
+      DatabaseService.sum('work_bills','total_balance','WHERE user_id = $1', [userId]),
+      DatabaseService.sum('entry_items ei JOIN daily_entries de ON ei.daily_entry_id = de.id JOIN work_bills wb ON wb.id = de.bill_id','ei.amount','WHERE wb.user_id = $1 AND de.entry_date BETWEEN $2 AND $3',[userId,start,end]),
+      DatabaseService.sum('entry_items ei JOIN daily_entries de ON ei.daily_entry_id = de.id JOIN work_bills wb ON wb.id = de.bill_id','ei.amount','WHERE wb.user_id = $1 AND de.entry_date BETWEEN $2 AND $3',[userId,prevStart,prevEnd]),
+      this.getCategoryTotals(userId,start,end),
+      this.getCategoryTotals(userId,prevStart,prevEnd),
+      this.getWeeklyTotals(userId,start,end)
+    ]);
+
+    const currentSavings = this.calculateSavings(currIncome, currExpense);
+    const previousSavings = this.calculateSavings(prevIncome, prevExpense);
+
+    return {
+      type: 'weekly',
+      weekStart: format(start,'yyyy-MM-dd'),
+      weekEnd: format(end,'yyyy-MM-dd'),
+      totalIncome: this.formatCurrency(currIncome),
+      totalExpense: this.formatCurrency(currExpense),
+      savings: currentSavings.savings,
+      savingsRate: currentSavings.savingsRate,
+      category: currCategories,
+      weeklyTotals,
+      previousWeek: {
+        totalIncome: this.formatCurrency(prevIncome),
+        totalExpense: this.formatCurrency(prevExpense),
+        savings: previousSavings.savings,
+        savingsRate: previousSavings.savingsRate,
+        category: prevCategories
+      }
+    };
   }
 
   static async generateYearlyReport(userId, date) {
     const parsedDate = this.validateDateParam(date);
     const start = startOfYear(parsedDate);
     const end = endOfYear(parsedDate);
-    const prevStart = startOfYear(subYears(parsedDate, 1));
-    const prevEnd = endOfYear(subYears(parsedDate, 1));
+    const prevStart = startOfYear(subYears(parsedDate,1));
+    const prevEnd = endOfYear(subYears(parsedDate,1));
 
     const prevDataExists = await DatabaseService.exists(`
       SELECT 1 FROM entry_items ei
@@ -378,7 +292,8 @@ class ReportService {
 
     const queries = [
       this.getCategoryTotals(userId, start, end),
-      DatabaseService.sum('work_bills','total_balance','WHERE user_id = $1 AND bill_month BETWEEN $2 AND $3', [userId, format(start, 'yyyy-MM'), format(end, 'yyyy-MM')]),
+      DatabaseService.sum('work_bills','total_balance','WHERE user_id = $1', [userId]),
+      DatabaseService.sum('entry_items ei JOIN daily_entries de ON ei.daily_entry_id = de.id JOIN work_bills wb ON wb.id = de.bill_id','ei.amount','WHERE wb.user_id = $1 AND de.entry_date BETWEEN $2 AND $3',[userId,start,end]),
       this.getMonthlyTotals(userId, start, end),
       this.getQuarterlyTotals(userId, start, end),
       this.getDetailedMonthly(userId, start, end)
@@ -386,8 +301,8 @@ class ReportService {
 
     if (prevDataExists) {
       queries.push(
-        DatabaseService.sum('work_bills','total_balance','WHERE user_id = $1 AND bill_month BETWEEN $2 AND $3', [userId, format(prevStart, 'yyyy-MM'), format(prevEnd, 'yyyy-MM')]),
-        DatabaseService.sum('entry_items ei JOIN daily_entries de ON ei.daily_entry_id = de.id JOIN work_bills wb ON wb.id = de.bill_id', 'ei.amount','WHERE wb.user_id = $1 AND de.entry_date BETWEEN $2 AND $3', [userId, prevStart, prevEnd]),
+        DatabaseService.sum('work_bills','total_balance','WHERE user_id = $1', [userId]),
+        DatabaseService.sum('entry_items ei JOIN daily_entries de ON ei.daily_entry_id = de.id JOIN work_bills wb ON wb.id = de.bill_id','ei.amount','WHERE wb.user_id = $1 AND de.entry_date BETWEEN $2 AND $3',[userId,prevStart,prevEnd]),
         this.getCategoryTotals(userId, prevStart, prevEnd),
         this.getMonthlyTotals(userId, prevStart, prevEnd),
         this.getDetailedMonthly(userId, prevStart, prevEnd)
@@ -395,22 +310,15 @@ class ReportService {
     }
 
     const results = await Promise.all(queries);
-    const [catCurr, incomeCurr, currMonthly, currQuarterly, currDetailedMonthly, ...rest] = results;
+    const [catCurr, incomeCurr, currExpense, currMonthly, currQuarterly, currDetailedMonthly, ...rest] = results;
 
-    const totalIncome = this.formatCurrency(incomeCurr);
-    const totalExpense = catCurr.reduce((sum, cat) => sum + cat.amount, 0);
-    const currentSavings = this.calculateSavings(totalIncome, totalExpense);
+    const currentSavings = this.calculateSavings(incomeCurr, currExpense);
 
     const response = {
       type: 'yearly',
-      year: {
-        year: start.getFullYear(),
-        label: `${start.getFullYear()}`,
-        months: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
-        quarters: ['Q1','Q2','Q3','Q4']
-      },
-      totalIncome,
-      totalExpense,
+      year: { year: start.getFullYear(), label: `${start.getFullYear()}`, months: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], quarters: ['Q1','Q2','Q3','Q4'] },
+      totalIncome: this.formatCurrency(incomeCurr),
+      totalExpense: this.formatCurrency(currExpense),
       savings: currentSavings.savings,
       savingsRate: currentSavings.savingsRate,
       hasPreviousYearData: prevDataExists,
@@ -422,13 +330,11 @@ class ReportService {
 
     if (prevDataExists && rest.length === 5) {
       const [prevIncome, prevExpense, prevCategories, prevMonthly, prevDetailedMonthly] = rest;
-      const previousIncome = this.formatCurrency(prevIncome);
-      const previousExpense = this.formatCurrency(prevExpense);
-      const previousSavings = this.calculateSavings(previousIncome, previousExpense);
+      const previousSavings = this.calculateSavings(prevIncome, prevExpense);
       response.previousYear = {
         year: prevStart.getFullYear(),
-        totalIncome: previousIncome,
-        totalExpense: previousExpense,
+        totalIncome: this.formatCurrency(prevIncome),
+        totalExpense: this.formatCurrency(prevExpense),
         savings: previousSavings.savings,
         savingsRate: previousSavings.savingsRate,
         category: prevCategories,
@@ -438,63 +344,6 @@ class ReportService {
     }
 
     return response;
-  }
-
-  // ===== AVAILABLE DATA METHODS =====
-  static async getAvailableQuarters(userId) {
-    console.log('📅 getAvailableQuarters called for user:', userId);
-    
-    const sql = `
-      SELECT DISTINCT
-        EXTRACT(YEAR FROM de.entry_date) AS year,
-        EXTRACT(QUARTER FROM de.entry_date) AS quarter,
-        COUNT(*) as entry_count,
-        SUM(ei.amount) as total_amount
-      FROM daily_entries de
-      JOIN entry_items ei ON ei.daily_entry_id = de.id
-      JOIN work_bills wb ON wb.id = de.bill_id
-      WHERE wb.user_id = $1
-      GROUP BY EXTRACT(YEAR FROM de.entry_date), EXTRACT(QUARTER FROM de.entry_date)
-      ORDER BY year DESC, quarter DESC
-    `;
-    
-    const rows = await DatabaseService.query(sql, [userId]);
-    console.log('📅 Raw quarters from DB:', rows);
-    
-    const quarters = rows.map(r => ({
-      year: Number(r.year),
-      quarter: Number(r.quarter),
-      label: `Q${r.quarter} ${r.year}`,
-      value: `${r.year}-${String((r.quarter - 1) * 3 + 1).padStart(2, '0')}-01`,
-      entryCount: Number(r.entry_count),
-      totalAmount: this.formatCurrency(r.total_amount)
-    }));
-    
-    console.log('📅 Processed quarters:', quarters);
-    return quarters;
-  }
-
-  static async getAvailableYears(userId) {
-    const sql = `
-      SELECT DISTINCT
-        EXTRACT(YEAR FROM de.entry_date) AS year,
-        COUNT(*) as entry_count,
-        SUM(ei.amount) as total_amount
-      FROM daily_entries de
-      JOIN entry_items ei ON ei.daily_entry_id = de.id
-      JOIN work_bills wb ON wb.id = de.bill_id
-      WHERE wb.user_id = $1
-      GROUP BY EXTRACT(YEAR FROM de.entry_date)
-      ORDER BY year DESC
-    `;
-    const rows = await DatabaseService.query(sql, [userId]);
-    return rows.map(r => ({
-      year: Number(r.year),
-      label: `${r.year}`,
-      value: `${r.year}-01-01`,
-      entryCount: Number(r.entry_count),
-      totalAmount: this.formatCurrency(r.total_amount)
-    }));
   }
 }
 
