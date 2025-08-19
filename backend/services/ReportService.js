@@ -3,7 +3,7 @@ const { createError } = require('../middleware/errorHandler');
 const { 
   parseISO, isValid, format, startOfMonth, endOfMonth,
   startOfQuarter, endOfQuarter, startOfYear, endOfYear,
-  subMonths, subQuarters, subYears,
+  subMonths, subQuarters, subYears,subWeeks,
   startOfWeek, endOfWeek
 } = require('date-fns');
 
