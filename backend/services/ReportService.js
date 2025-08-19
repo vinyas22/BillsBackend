@@ -235,45 +235,87 @@ class ReportService {
     };
   }
 
-  static async generateWeeklyReport(userId, date) {
-    const parsed = this.validateDateParam(date);
-    const start = startOfWeek(parsed, { weekStartsOn: 1 });
-    const end = endOfWeek(parsed, { weekStartsOn: 1 });
-    const prevStart = startOfWeek(subMonths(parsed,1), { weekStartsOn: 1 });
-    const prevEnd = endOfWeek(subMonths(parsed,1), { weekStartsOn: 1 });
+ static async generateWeeklyReport(userId, date) {
+  // Parse the input date
+  const parsed = this.validateDateParam(date);
 
-    const [currIncome, prevIncome, currExpense, prevExpense, currCategories, prevCategories, weeklyTotals] = await Promise.all([
-      DatabaseService.sum('work_bills','total_balance','WHERE user_id = $1', [userId]),
-      DatabaseService.sum('work_bills','total_balance','WHERE user_id = $1', [userId]),
-      DatabaseService.sum('entry_items ei JOIN daily_entries de ON ei.daily_entry_id = de.id JOIN work_bills wb ON wb.id = de.bill_id','ei.amount','WHERE wb.user_id = $1 AND de.entry_date BETWEEN $2 AND $3',[userId,start,end]),
-      DatabaseService.sum('entry_items ei JOIN daily_entries de ON ei.daily_entry_id = de.id JOIN work_bills wb ON wb.id = de.bill_id','ei.amount','WHERE wb.user_id = $1 AND de.entry_date BETWEEN $2 AND $3',[userId,prevStart,prevEnd]),
-      this.getCategoryTotals(userId,start,end),
-      this.getCategoryTotals(userId,prevStart,prevEnd),
-      this.getWeeklyTotals(userId,start,end)
-    ]);
+  // Current week: Sunday → Saturday
+  const start = startOfWeek(parsed);
+  const end = endOfWeek(parsed);
 
-    const currentSavings = this.calculateSavings(currIncome, currExpense);
-    const previousSavings = this.calculateSavings(prevIncome, prevExpense);
+  // Previous week: also Sunday → Saturday
+  const prevStart = startOfWeek(subWeeks(parsed, 1));
+  const prevEnd = endOfWeek(subWeeks(parsed, 1));
 
-    return {
-      type: 'weekly',
-      weekStart: format(start,'yyyy-MM-dd'),
-      weekEnd: format(end,'yyyy-MM-dd'),
-      totalIncome: this.formatCurrency(currIncome),
-      totalExpense: this.formatCurrency(currExpense),
-      savings: currentSavings.savings,
-      savingsRate: currentSavings.savingsRate,
-      category: currCategories,
-      weeklyTotals,
-      previousWeek: {
-        totalIncome: this.formatCurrency(prevIncome),
-        totalExpense: this.formatCurrency(prevExpense),
-        savings: previousSavings.savings,
-        savingsRate: previousSavings.savingsRate,
-        category: prevCategories
-      }
-    };
-  }
+  // Fetch all necessary data in parallel
+  const [
+    currIncome,
+    prevIncome,
+    currExpense,
+    prevExpense,
+    currCategories,
+    prevCategories,
+    weeklyTotals
+  ] = await Promise.all([
+    // Total income in current week
+    DatabaseService.sum(
+      'work_bills',
+      'total_balance',
+      'WHERE user_id = $1',
+      [userId]
+    ),
+    // Total income in previous week
+    DatabaseService.sum(
+      'work_bills',
+      'total_balance',
+      'WHERE user_id = $1',
+      [userId]
+    ),
+    // Total expense in current week
+    DatabaseService.sum(
+      'entry_items ei JOIN daily_entries de ON ei.daily_entry_id = de.id JOIN work_bills wb ON wb.id = de.bill_id',
+      'ei.amount',
+      'WHERE wb.user_id = $1 AND de.entry_date BETWEEN $2 AND $3',
+      [userId, start, end]
+    ),
+    // Total expense in previous week
+    DatabaseService.sum(
+      'entry_items ei JOIN daily_entries de ON ei.daily_entry_id = de.id JOIN work_bills wb ON wb.id = de.bill_id',
+      'ei.amount',
+      'WHERE wb.user_id = $1 AND de.entry_date BETWEEN $2 AND $3',
+      [userId, prevStart, prevEnd]
+    ),
+    // Category breakdown current week
+    this.getCategoryTotals(userId, start, end),
+    // Category breakdown previous week
+    this.getCategoryTotals(userId, prevStart, prevEnd),
+    // Weekly totals for chart
+    this.getWeeklyTotals(userId, start, end)
+  ]);
+
+  const currentSavings = this.calculateSavings(currIncome, currExpense);
+  const previousSavings = this.calculateSavings(prevIncome, prevExpense);
+
+  return {
+    type: 'weekly',
+    weekStart: format(start, 'yyyy-MM-dd'),
+    weekEnd: format(end, 'yyyy-MM-dd'),
+    totalIncome: this.formatCurrency(currIncome),
+    totalExpense: this.formatCurrency(currExpense),
+    savings: currentSavings.savings,
+    savingsRate: currentSavings.savingsRate,
+    category: currCategories,
+    weeklyTotals,
+    previousWeek: {
+      totalIncome: this.formatCurrency(prevIncome),
+      totalExpense: this.formatCurrency(prevExpense),
+      savings: previousSavings.savings,
+      savingsRate: previousSavings.savingsRate,
+      category: prevCategories
+    }
+  };
+}
+
 
   static async generateYearlyReport(userId, date) {
     const parsedDate = this.validateDateParam(date);
