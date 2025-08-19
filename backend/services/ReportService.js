@@ -387,6 +387,87 @@ class ReportService {
 
     return response;
   }
+  static async generateDailyReport(userId, date) {
+  const parsed = this.validateDateParam(date);
+
+  // Current day
+  const start = parsed;
+  const end = parsed;
+
+  // Previous day
+  const prevDate = subDays(parsed, 1);
+  const prevStart = prevDate;
+  const prevEnd = prevDate;
+
+  // Fetch all data in parallel
+  const [
+    currIncome,
+    prevIncome,
+    currExpense,
+    prevExpense,
+    currCategories,
+    prevCategories,
+    currDaily,
+    prevDaily,
+    currDetailed,
+    prevDetailed
+  ] = await Promise.all([
+    // Total income for the day (bills due today)
+    DatabaseService.sum('work_bills', 'total_balance', 'WHERE user_id = $1 AND bill_month = $2', [userId, format(start, 'yyyy-MM')]),
+    // Previous day income
+    DatabaseService.sum('work_bills', 'total_balance', 'WHERE user_id = $1 AND bill_month = $2', [userId, format(prevStart, 'yyyy-MM')]),
+    // Total expense for the day
+    DatabaseService.sum(
+      'entry_items ei JOIN daily_entries de ON ei.daily_entry_id = de.id JOIN work_bills wb ON wb.id = de.bill_id',
+      'ei.amount',
+      'WHERE wb.user_id = $1 AND de.entry_date = $2',
+      [userId, start]
+    ),
+    // Previous day expense
+    DatabaseService.sum(
+      'entry_items ei JOIN daily_entries de ON ei.daily_entry_id = de.id JOIN work_bills wb ON wb.id = de.bill_id',
+      'ei.amount',
+      'WHERE wb.user_id = $1 AND de.entry_date = $2',
+      [userId, prevStart]
+    ),
+    // Category breakdown current day
+    this.getCategoryTotals(userId, start, end),
+    // Category breakdown previous day
+    this.getCategoryTotals(userId, prevStart, prevEnd),
+    // Daily totals for chart (only one day here, but consistent format)
+    this.getDailyTotals(userId, start, end),
+    this.getDailyTotals(userId, prevStart, prevEnd),
+    // Detailed daily breakdown
+    this.getDetailedDaily(userId, start, end),
+    this.getDetailedDaily(userId, prevStart, prevEnd)
+  ]);
+
+  const currentSavings = this.calculateSavings(currIncome, currExpense);
+  const previousSavings = this.calculateSavings(prevIncome, prevExpense);
+
+  return {
+    type: 'daily',
+    date: format(start, 'yyyy-MM-dd'),
+    totalIncome: this.formatCurrency(currIncome),
+    totalExpense: this.formatCurrency(currExpense),
+    savings: currentSavings.savings,
+    savingsRate: currentSavings.savingsRate,
+    category: currCategories,
+    dailyTotals: currDaily,
+    detailedDaily: currDetailed,
+    previousDay: {
+      date: format(prevStart, 'yyyy-MM-dd'),
+      totalIncome: this.formatCurrency(prevIncome),
+      totalExpense: this.formatCurrency(prevExpense),
+      savings: previousSavings.savings,
+      savingsRate: previousSavings.savingsRate,
+      category: prevCategories,
+      dailyTotals: prevDaily,
+      detailedDaily: prevDetailed
+    }
+  };
+}
+
 }
 
 module.exports = ReportService;
