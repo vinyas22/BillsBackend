@@ -26,13 +26,14 @@ app.set('io', io);
 // Middleware
 app.use(cors({
   origin: [
-    'https://frntend-l8xe.onrender.com/login',
-    process.env.FRONTEND_URL  // Your deployed frontend
+    'https://frntend-l8xe.onrender.com', // frontend origin without path
+    process.env.FRONTEND_URL  // optional, if set
   ].filter(Boolean),
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
+
 
 
 app.use(express.json());
