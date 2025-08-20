@@ -26,6 +26,7 @@ app.set('io', io);
 // Middleware
 app.use(cors({
   origin: [
+    'http://localhost:4200', 
     'https://frntend-l8xe.onrender.com', // frontend origin without path
     process.env.FRONTEND_URL  // optional, if set
   ].filter(Boolean),

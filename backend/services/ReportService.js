@@ -236,18 +236,18 @@ class ReportService {
   }
 
  static async generateWeeklyReport(userId, date) {
-  // Parse the input date
+  // Parse and validate date
   const parsed = this.validateDateParam(date);
 
   // Current week: Sunday → Saturday
   const start = startOfWeek(parsed);
   const end = endOfWeek(parsed);
 
-  // Previous week: also Sunday → Saturday
+  // Previous week: Sunday → Saturday
   const prevStart = startOfWeek(subWeeks(parsed, 1));
   const prevEnd = endOfWeek(subWeeks(parsed, 1));
 
-  // Fetch all necessary data in parallel
+  // Fetch all data in parallel
   const [
     currIncome,
     prevIncome,
@@ -255,43 +255,51 @@ class ReportService {
     prevExpense,
     currCategories,
     prevCategories,
-    weeklyTotals
+    weeklyTotals,
+    currDaily,
+    prevDaily,
+    currDetailedDaily,
+    prevDetailedDaily
   ] = await Promise.all([
-    // Total income in current week
-    DatabaseService.sum(
-      'work_bills',
-      'total_balance',
-      'WHERE user_id = $1',
-      [userId]
-    ),
-    // Total income in previous week
-    DatabaseService.sum(
-      'work_bills',
-      'total_balance',
-      'WHERE user_id = $1',
-      [userId]
-    ),
-    // Total expense in current week
+    DatabaseService.sum('work_bills', 'total_balance', 'WHERE user_id = $1', [userId]),
+    DatabaseService.sum('work_bills', 'total_balance', 'WHERE user_id = $1', [userId]),
     DatabaseService.sum(
       'entry_items ei JOIN daily_entries de ON ei.daily_entry_id = de.id JOIN work_bills wb ON wb.id = de.bill_id',
       'ei.amount',
       'WHERE wb.user_id = $1 AND de.entry_date BETWEEN $2 AND $3',
       [userId, start, end]
     ),
-    // Total expense in previous week
     DatabaseService.sum(
       'entry_items ei JOIN daily_entries de ON ei.daily_entry_id = de.id JOIN work_bills wb ON wb.id = de.bill_id',
       'ei.amount',
       'WHERE wb.user_id = $1 AND de.entry_date BETWEEN $2 AND $3',
       [userId, prevStart, prevEnd]
     ),
-    // Category breakdown current week
     this.getCategoryTotals(userId, start, end),
-    // Category breakdown previous week
     this.getCategoryTotals(userId, prevStart, prevEnd),
-    // Weekly totals for chart
-    this.getWeeklyTotals(userId, start, end)
+    this.getWeeklyTotals(userId, start, end),
+    this.getDailyTotals(userId, start, end),
+    this.getDailyTotals(userId, prevStart, prevEnd),
+    this.getDetailedDaily(userId, start, end),
+    this.getDetailedDaily(userId, prevStart, prevEnd)
   ]);
+
+  // Log debug information about loaded data
+  console.log('generateWeeklyReport Debug Info:', {
+    weekStart: format(start, 'yyyy-MM-dd'),
+    weekEnd: format(end, 'yyyy-MM-dd'),
+    currentIncome: this.formatCurrency(currIncome),
+    previousIncome: this.formatCurrency(prevIncome),
+    currentExpense: this.formatCurrency(currExpense),
+    previousExpense: this.formatCurrency(prevExpense),
+    currentCategoriesCount: currCategories.length,
+    previousCategoriesCount: prevCategories.length,
+    weeklyTotalsCount: weeklyTotals.length,
+    currentDailyCount: currDaily.length,
+    previousDailyCount: prevDaily.length,
+    currentDetailedDailyCount: currDetailedDaily.length,
+    previousDetailedDailyCount: prevDetailedDaily.length
+  });
 
   const currentSavings = this.calculateSavings(currIncome, currExpense);
   const previousSavings = this.calculateSavings(prevIncome, prevExpense);
@@ -305,16 +313,21 @@ class ReportService {
     savings: currentSavings.savings,
     savingsRate: currentSavings.savingsRate,
     category: currCategories,
+    daily: currDaily,
+    detailed_daily: currDetailedDaily,
     weeklyTotals,
     previousWeek: {
       totalIncome: this.formatCurrency(prevIncome),
       totalExpense: this.formatCurrency(prevExpense),
       savings: previousSavings.savings,
       savingsRate: previousSavings.savingsRate,
-      category: prevCategories
+      category: prevCategories,
+      daily: prevDaily,
+      detailed_daily: prevDetailedDaily
     }
   };
 }
+
 
 
   static async generateYearlyReport(userId, date) {
