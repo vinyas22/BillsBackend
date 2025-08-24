@@ -171,33 +171,24 @@ const getYearlyReport = async (req, res) => {
 /**
  * Get available quarters for the user
  */
-const getAvailableQuarters = async (req, res) => {
+async function getAvailableQuarters(req, res, next) {
   try {
-    const userId = req.user.userId;
-    
-    console.log('📌 Fetching available quarters for user:', userId);
-    
-    const quarters = await ReportService.getAvailableQuarters(userId);
-    
-    console.log('📊 DB returned quarters:', quarters.length, 'quarters');
-    
-    res.json({
-      success: true,
-      data: {
-        quarters: quarters
-      },
-      message: 'Available quarters retrieved successfully'
-    });
-  } catch (error) {
-    console.error('Available quarters error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to retrieve available quarters',
-      error: error.message
-    });
-  }
-};
+    const userId = req.user.userId; // Use consistent userId property
+    console.log('Fetching available quarters for userId:', userId);
 
+    const quarters = await ReportService.getAvailableQuarters(userId);
+
+    console.log('Quarters found:', quarters);
+
+    res.json({ quarters });
+  } catch (error) {
+    console.error('Error fetching available quarters:', error);
+    next(error);
+  }
+}
+
+
+module.exports = { getAvailableQuarters };
 /**
  * Get available years for the user
  */

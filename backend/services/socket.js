@@ -5,9 +5,13 @@ const jwt = require('jsonwebtoken');
 let io;
 
 function initializeSocket(server) {
-  io = socketIO(server, {
+  const io = socketIO(server, {
     cors: {
-      origin: process.env.FRONTEND_URL || "http://localhost:4200",
+      origin: [
+        process.env.FRONTEND_URL, // Optional: environment-specific
+        "http://localhost:4200",
+        "https://frntend-l8xe.onrender.com"
+      ].filter(Boolean),
       methods: ["GET", "POST"],
       credentials: true
     }

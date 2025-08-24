@@ -4,7 +4,7 @@ const {
   parseISO, isValid, format, startOfMonth, endOfMonth,
   startOfQuarter, endOfQuarter, startOfYear, endOfYear,
   subMonths, subQuarters, subYears,subWeeks,
-  startOfWeek, endOfWeek
+  startOfWeek, endOfWeek, addMonths
 } = require('date-fns');
 
 class ReportService {
@@ -198,42 +198,88 @@ class ReportService {
     };
   }
 
-  static async generateQuarterlyReport(userId, date) {
-    const parsed = this.validateDateParam(date);
-    const start = startOfQuarter(parsed);
-    const end = endOfQuarter(parsed);
-    const prevStart = startOfQuarter(subQuarters(parsed,1));
-    const prevEnd = endOfQuarter(subQuarters(parsed,1));
 
-    const [currIncome, prevIncome, currExpense, prevExpense, currCategories, prevCategories] = await Promise.all([
-      DatabaseService.sum('work_bills','total_balance','WHERE user_id = $1', [userId]),
-      DatabaseService.sum('work_bills','total_balance','WHERE user_id = $1', [userId]),
-      DatabaseService.sum('entry_items ei JOIN daily_entries de ON ei.daily_entry_id = de.id JOIN work_bills wb ON wb.id = de.bill_id','ei.amount','WHERE wb.user_id = $1 AND de.entry_date BETWEEN $2 AND $3',[userId,start,end]),
-      DatabaseService.sum('entry_items ei JOIN daily_entries de ON ei.daily_entry_id = de.id JOIN work_bills wb ON wb.id = de.bill_id','ei.amount','WHERE wb.user_id = $1 AND de.entry_date BETWEEN $2 AND $3',[userId,prevStart,prevEnd]),
-      this.getCategoryTotals(userId,start,end),
-      this.getCategoryTotals(userId,prevStart,prevEnd)
-    ]);
 
-    const currentSavings = this.calculateSavings(currIncome, currExpense);
-    const previousSavings = this.calculateSavings(prevIncome, prevExpense);
+static async generateQuarterlyReport(userId, date) {
+  const parsed = this.validateDateParam(date);
+  const start = startOfQuarter(parsed);
+  const end = endOfQuarter(parsed);
+  const prevStart = startOfQuarter(subQuarters(parsed, 1));
+  const prevEnd = endOfQuarter(subQuarters(parsed, 1));
 
-    return {
-      type: 'quarterly',
-      quarter: `Q${Math.ceil((start.getMonth()+1)/3)} ${start.getFullYear()}`,
-      totalIncome: this.formatCurrency(currIncome),
-      totalExpense: this.formatCurrency(currExpense),
-      savings: currentSavings.savings,
-      savingsRate: currentSavings.savingsRate,
-      category: currCategories,
-      previousQuarter: {
-        totalIncome: this.formatCurrency(prevIncome),
-        totalExpense: this.formatCurrency(prevExpense),
-        savings: previousSavings.savings,
-        savingsRate: previousSavings.savingsRate,
-        category: prevCategories
-      }
-    };
-  }
+  // Fetch all required data in parallel, including daily and detailed daily breakdowns
+  const [
+    currIncome,
+    prevIncome,
+    currExpense,
+    prevExpense,
+    currCategories,
+    prevCategories,
+    currDaily,
+    prevDaily,
+    currDetailedDaily,
+    prevDetailedDaily
+  ] = await Promise.all([
+    DatabaseService.sum('work_bills','total_balance','WHERE user_id = $1', [userId]),
+    DatabaseService.sum('work_bills','total_balance','WHERE user_id = $1', [userId]),
+    DatabaseService.sum(
+      'entry_items ei JOIN daily_entries de ON ei.daily_entry_id = de.id JOIN work_bills wb ON wb.id = de.bill_id',
+      'ei.amount',
+      'WHERE wb.user_id = $1 AND de.entry_date BETWEEN $2 AND $3',[userId, start, end]
+    ),
+    DatabaseService.sum(
+      'entry_items ei JOIN daily_entries de ON ei.daily_entry_id = de.id JOIN work_bills wb ON wb.id = de.bill_id',
+      'ei.amount',
+      'WHERE wb.user_id = $1 AND de.entry_date BETWEEN $2 AND $3',[userId, prevStart, prevEnd]
+    ),
+    this.getCategoryTotals(userId, start, end),
+    this.getCategoryTotals(userId, prevStart, prevEnd),
+    this.getDailyTotals(userId, start, end),          // Added - current quarter daily totals
+    this.getDailyTotals(userId, prevStart, prevEnd),  // Added - previous quarter daily totals
+    this.getDetailedDaily(userId, start, end),        // Added - current quarter detailed daily
+    this.getDetailedDaily(userId, prevStart, prevEnd) // Added - previous quarter detailed daily
+  ]);
+
+  const currentSavings = this.calculateSavings(currIncome, currExpense);
+  const previousSavings = this.calculateSavings(prevIncome, prevExpense);
+
+  // Compose months array for the quarter
+  const quarterStart = startOfQuarter(start);
+  const months = [
+    format(quarterStart, 'MMM'),
+    format(addMonths(quarterStart, 1), 'MMM'),
+    format(addMonths(quarterStart, 2), 'MMM')
+  ];
+
+  return {
+    type: 'quarterly',
+    quarter: {
+      quarter: Math.ceil((start.getMonth() + 1) / 3),
+      year: start.getFullYear(),
+      months,
+      label: `Q${Math.ceil((start.getMonth() + 1) / 3)} ${start.getFullYear()}`
+    },
+    totalIncome: this.formatCurrency(currIncome),
+    totalExpense: this.formatCurrency(currExpense),
+    savings: currentSavings.savings,
+    savingsRate: currentSavings.savingsRate,
+    category: currCategories,
+    daily: currDaily,                    // Included for frontend daily charts
+    detailed_daily: currDetailedDaily,  // Included for frontend detailed daily charts
+    previousQuarter: {
+      totalIncome: this.formatCurrency(prevIncome),
+      totalExpense: this.formatCurrency(prevExpense),
+      savings: previousSavings.savings,
+      savingsRate: previousSavings.savingsRate,
+      category: prevCategories,
+      daily: prevDaily,                  // Included for previous quarter
+      detailed_daily: prevDetailedDaily // Included for previous quarter
+    }
+  };
+}
+
+
+
 
  static async generateWeeklyReport(userId, date) {
   // Parse and validate date
@@ -480,6 +526,27 @@ class ReportService {
     }
   };
 }
+
+static async getAvailableQuarters(userId) {
+  const sql = `
+    SELECT DISTINCT
+      EXTRACT(YEAR FROM de.entry_date) AS year,
+      EXTRACT(QUARTER FROM de.entry_date) AS quarter
+    FROM daily_entries de
+    JOIN work_bills wb ON wb.id = de.bill_id
+    WHERE wb.user_id = $1
+    ORDER BY year DESC, quarter DESC
+  `;
+  const rows = await DatabaseService.query(sql, [userId]);
+
+  return rows.map(r => ({
+    year: r.year,
+    quarter: r.quarter,
+    label: `Q${r.quarter} ${r.year}`,
+    value: `${r.year}-${String((r.quarter - 1) * 3 + 1).padStart(2, '0')}-01`
+  }));
+}
+
 
 }
 
