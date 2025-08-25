@@ -6,6 +6,8 @@ const generateQuarterlyReports = require('./generateQuarterlyReports');
 // Weekly reports every Monday at 9 AM
 cron.schedule('0 9 * * 1', async () => {
   console.log('🔄 Running Weekly Report Cron Job...');
+    console.log('🔄 Running Weekly Report Cron Job at:', new Date().toString());
+
   try {
     await generateWeeklyReports();
   } catch (error) {
