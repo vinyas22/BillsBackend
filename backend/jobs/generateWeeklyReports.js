@@ -20,8 +20,8 @@ async function generateWeeklyReports() {
   for (const user of users.rows) {
     try {
       const currentDate = new Date();
-      const lastWeekStart = startOfWeek(subWeeks(currentDate, 1), { weekStartsOn: 1 });
-      const lastWeekEnd = endOfWeek(subWeeks(currentDate, 1), { weekStartsOn: 1 });
+const lastWeekStart = startOfWeek(subWeeks(currentDate, 1));
+const lastWeekEnd = endOfWeek(subWeeks(currentDate, 1));
 
       // Fixed query - using bill_id to join with work_bills table first
       const entries = await db.query(
@@ -87,8 +87,8 @@ async function generateWeeklyReports() {
       ];
 
       // Add comparison if previous week data available
-      const prevWeekStart = startOfWeek(subWeeks(lastWeekStart, 1), { weekStartsOn: 1 });
-      const prevWeekEnd = endOfWeek(subWeeks(lastWeekEnd, 1), { weekStartsOn: 1 });
+      const prevWeekStart = startOfWeek(subWeeks(lastWeekStart, 1));
+const prevWeekEnd = endOfWeek(subWeeks(lastWeekEnd, 1));
       
       const prevWeekData = await db.query(
         `SELECT COALESCE(SUM(i.amount), 0) as total
