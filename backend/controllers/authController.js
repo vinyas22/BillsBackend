@@ -73,7 +73,7 @@ const resendVerification = async (req, res) => {
     token = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '1d' });
     await pool.query("UPDATE users SET verification_token=$1 WHERE email=$2", [token, email]);
   }
-  const verifyUrl = `http://localhost:5001/api/auth/verify?token=${token}`;
+  const verifyUrl = `https://billsbackend-7n2f.onrender.com/api/auth/verify?token=${token}`;
   const html = `
     <h2>Hi ${user.name},</h2>
     <p>Please click to verify your Work Billing account:</p>
