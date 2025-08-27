@@ -19,7 +19,7 @@ const register = async (req, res) => {
       [name, email, hashed, token]
     );
 
-    const verifyUrl = `http://localhost:5001/api/auth/verify?token=${token}`;
+    const verifyUrl = `https://billsbackend-7n2f.onrender.com/api/auth/verify?token=${token}`;
     const html = `
       <h2>Hi ${name},</h2>
       <p>Thank you for signing up for the Work Billing System.</p>
