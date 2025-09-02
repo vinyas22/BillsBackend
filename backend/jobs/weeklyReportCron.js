@@ -2,12 +2,22 @@ const cron = require('node-cron');
 const generateWeeklyReports = require('./generateWeeklyReports');
 const generateMonthlyReports = require('./generateMonthlyReports');
 const generateQuarterlyReports = require('./generateQuarterlyReports');
+const generateYearlyReports = require('./generateYearlyReports');
+const sendDailyReminders = require('./dailyReminder');
 
-// Weekly reports every Monday at 9 AM
-cron.schedule('0 9 * * 1', async () => {
-  console.log('🔄 Running Weekly Report Cron Job...');
-    console.log('🔄 Running Weekly Report Cron Job at:', new Date().toString());
+// Daily reminder → 1st of every month at 9:00 AM IST → 3:30 AM UTC
+cron.schedule('30 3 1 * *', async () => {
+  console.log('⏰ Running Monthly Daily Reminder (1st @ 9:00 AM IST)...');
+  try {
+    await sendDailyReminders();
+  } catch (error) {
+    console.error('❌ Daily reminder failed:', error);
+  }
+});
 
+// Weekly reports → Every Monday 9:00 AM IST → 3:30 AM UTC
+cron.schedule('30 3 * * 1', async () => {
+  console.log('🔄 Running Weekly Report (9:00 AM IST)...');
   try {
     await generateWeeklyReports();
   } catch (error) {
@@ -15,9 +25,9 @@ cron.schedule('0 9 * * 1', async () => {
   }
 });
 
-// Monthly reports on 2nd day of each month at 10 AM
-cron.schedule('0 10 2 * *', async () => {
-  console.log('🔄 Running Monthly Report Cron Job...');
+// Monthly reports → 1st of month 10:00 AM IST → 4:30 AM UTC
+cron.schedule('30 4 1 * *', async () => {
+  console.log('🔄 Running Monthly Report (1st @ 10:00 AM IST)...');
   try {
     await generateMonthlyReports();
   } catch (error) {
@@ -25,9 +35,9 @@ cron.schedule('0 10 2 * *', async () => {
   }
 });
 
-// Quarterly reports on 5th day of quarter-starting months (Jan, Apr, Jul, Oct) at 11 AM
-cron.schedule('0 11 2 1,4,7,10 *', async () => {
-  console.log('🔄 Running Quarterly Report Cron Job...');
+// Quarterly reports → 1st Jan/Apr/Jul/Oct at 11:00 AM IST → 5:30 AM UTC
+cron.schedule('30 5 1 1,4,7,10 *', async () => {
+  console.log('🔄 Running Quarterly Report (1st @ 11:00 AM IST)...');
   try {
     await generateQuarterlyReports();
   } catch (error) {
@@ -35,12 +45,9 @@ cron.schedule('0 11 2 1,4,7,10 *', async () => {
   }
 });
 
-console.log('📅 All cron jobs scheduled successfully:');
-console.log('   📊 Weekly: Every Monday at 9:00 AM');
-console.log('   📈 Monthly: 2nd day of each month at 10:00 AM');
-console.log('   📊 Quarterly: 2nd day of Jan/Apr/Jul/Oct at 11:00 AM');
-cron.schedule('0 12 10 1 *', async () => {
-  console.log('🔄 Running Intelligent Yearly Report Cron Job...');
+// Yearly reports → 1st Jan at 12:00 PM IST → 6:30 AM UTC
+cron.schedule('30 6 1 1 *', async () => {
+  console.log('🔄 Running Yearly Report (1st Jan @ 12:00 PM IST)...');
   try {
     await generateYearlyReports();
   } catch (error) {
@@ -48,8 +55,4 @@ cron.schedule('0 12 10 1 *', async () => {
   }
 });
 
-console.log('📅 All cron jobs scheduled successfully:');
-console.log('   📊 Weekly: Every Monday at 9:00 AM');
-console.log('   📈 Monthly: 2nd day of each month at 10:00 AM');
-console.log('   📊 Quarterly: 5th day of Jan/Apr/Jul/Oct at 11:00 AM');
-console.log('   🗓️ Yearly: January 10th at 12:00 PM (Intelligent Data Selection)');
+console.log('📅 All cron jobs scheduled successfully (IST adjusted)');

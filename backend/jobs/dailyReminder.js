@@ -13,7 +13,7 @@ const sendDailyReminders = async () => {
       const html = `
         <h3>Hi ${user.name} 👋</h3>
         <p>This is a friendly reminder to add your expenses for today in your Work Billing System.</p>
-        <p><a href="http://your-frontend-app.com/login">Click here to log in</a></p>
+        <p><a href="https://frntend-l8xe.onrender.com/login">Click here to log in</a></p>
         <p style="font-size: 12px; color: gray;">This is an automated reminder.</p>
       `;
       await sendMail(user.email, "📌 Daily Reminder: Don't forget today's entry!", html);
