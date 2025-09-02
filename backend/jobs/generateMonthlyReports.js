@@ -1,6 +1,6 @@
 // generateMonthlyReports.js
 const db = require('../db');
-const { format, subMonths, startOfMonth } = require('date-fns');
+const { format, subMonths, startOfMonth,endOfMonth  } = require('date-fns');
 const ReportService = require('../services/ReportService');
 const NotificationService = require('../services/notificationService');
 const monthlySummaryTemplate = require('../toolbox/monthlySummaryTemplate');
