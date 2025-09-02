@@ -2,7 +2,7 @@ const { format } = require('date-fns');
 
 function monthlySummaryTemplate(data) {
   const {
-    userName,
+     userName,
     monthStart,
     monthEnd,
     totalExpense,
@@ -14,8 +14,14 @@ function monthlySummaryTemplate(data) {
     insights = []
   } = data;
 
-  const monthName = format(new Date(monthStart), 'MMMM yyyy');
-  const tdStyle = `style="padding: 10px 12px; border: 1px solid #ddd; font-size: 14px;"`;
+let monthName = "Unknown Period";
+  try {
+    if (monthStart) {
+      monthName = format(new Date(monthStart), "MMMM yyyy");
+    }
+  } catch (err) {
+    console.warn("⚠️ Invalid monthStart in monthlySummaryTemplate:", monthStart);
+  }  const tdStyle = `style="padding: 10px 12px; border: 1px solid #ddd; font-size: 14px;"`;
 
   const colorAmount = (amt) => {
     if (amt >= 15000) return 'color: #dc2626; font-weight: bold;';

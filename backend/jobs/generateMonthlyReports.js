@@ -18,7 +18,21 @@ async function generateMonthlyReports() {
   for (const user of users.rows) {
     try {
       const report = await ReportService.generateMonthlyReport(user.id, dateParam);
+      const fallbackStart = startOfMonth(lastMonth);
+const fallbackEnd = endOfMonth(lastMonth);
 
+if (!report.month) {
+  report.month = {};
+}
+if (!report.month.monthStart) {
+  report.month.monthStart = fallbackStart;
+}
+if (!report.month.monthEnd) {
+  report.month.monthEnd = fallbackEnd;
+}
+if (!report.month.label) {
+  report.month.label = format(fallbackStart, 'MMMM yyyy');
+} 
       // Build email content
       const html = monthlySummaryTemplate({
         userName: user.name,
